@@ -1,0 +1,6 @@
+{
+  "name": "Calculadora de Metas",
+  "description": "Calculadora de metas diárias para faturas e despesas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
