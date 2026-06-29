@@ -282,7 +282,7 @@ export default function App() {
     if (diasCalculo <= 0) diasCalculo = 1;
     
     const metaDiaria = Math.ceil(restante / diasCalculo);
-    const metaSemanal = Math.min(metaDiaria * 7, Math.ceil(restante));
+    const metaSemanal = metaDiaria * 7;
     
     somaMetaGeral += metaDiaria;
     somaMetaGeralSemanal += metaSemanal;
@@ -306,7 +306,8 @@ export default function App() {
       dataFormatadaBR,
       progressoAtual,
       restante,
-      porcentagem
+      porcentagem,
+      diasCalculo
     };
   });
 
@@ -580,9 +581,17 @@ export default function App() {
                       <span>{meta.descricao}</span>
                       {meta.recorrente && <RefreshCw className="w-4 h-4 text-emerald-500/70" title="Conta Recorrente" />}
                     </h3>
-                    <div className="flex items-center space-x-1.5 text-sm text-zinc-400 mt-1">
-                      <CalendarDays className="w-3.5 h-3.5" />
-                      <span>{meta.dataFormatadaBR} <span className="text-zinc-500">({meta.textoDias})</span></span>
+                    <div className="flex flex-col space-y-1 mt-1">
+                      <div className="flex items-center space-x-1.5 text-sm text-zinc-400">
+                        <CalendarDays className="w-3.5 h-3.5" />
+                        <span>{meta.dataFormatadaBR} <span className="text-zinc-500">({meta.textoDias})</span></span>
+                      </div>
+                      {meta.diasCalculo && (
+                        <div className="flex items-center space-x-1.5 text-[11px] text-zinc-500 font-medium">
+                          <Target className="w-3 h-3" />
+                          <span>Cálculo baseado em {meta.diasCalculo} {meta.diasCalculo === 1 ? 'dia' : 'dias'}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
