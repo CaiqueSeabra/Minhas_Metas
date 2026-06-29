@@ -281,8 +281,8 @@ export default function App() {
     
     if (diasCalculo <= 0) diasCalculo = 1;
     
-    const metaDiaria = restante / diasCalculo;
-    const metaSemanal = Math.min(metaDiaria * 7, restante);
+    const metaDiaria = Math.ceil(restante / diasCalculo);
+    const metaSemanal = Math.min(metaDiaria * 7, Math.ceil(restante));
     
     somaMetaGeral += metaDiaria;
     somaMetaGeralSemanal += metaSemanal;
