@@ -36,6 +36,7 @@ interface Meta {
   descricao: string;
   valor: number;
   vencimento: string;
+  dataInicio?: string;
   progresso?: number;
   pago?: boolean;
   recorrente?: boolean;
@@ -56,6 +57,7 @@ export default function App() {
 
   const [descricao, setDescricao] = useState('');
   const [valorInput, setValorInput] = useState('');
+  const [dataInicio, setDataInicio] = useState('');
   const [dataFinal, setDataFinal] = useState('');
   const [recorrente, setRecorrente] = useState(false);
   
@@ -106,12 +108,14 @@ export default function App() {
       descricao: descricao.trim(),
       valor: valor,
       vencimento: dataFinal,
+      dataInicio: dataInicio || undefined,
       recorrente: recorrente
     };
 
     setMetas([...metas, novaMeta]);
     setDescricao('');
     setValorInput('');
+    setDataInicio('');
     setRecorrente(false);
     setSelectedPeriod(dataFinal.substring(0, 7));
   };
@@ -131,6 +135,18 @@ export default function App() {
     }
 
     const nextVencimento = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+    
+    let nextDataInicio = undefined;
+    if (metaAtual.dataInicio) {
+      const [anoIStr, mesIStr, diaIStr] = metaAtual.dataInicio.split('-');
+      let dataI = new Date(parseInt(anoIStr), parseInt(mesIStr) - 1, parseInt(diaIStr));
+      dataI.setMonth(dataI.getMonth() + 1);
+      if (dataI.getMonth() !== (parseInt(mesIStr) % 12)) {
+        dataI.setDate(0);
+      }
+      nextDataInicio = `${dataI.getFullYear()}-${String(dataI.getMonth() + 1).padStart(2, '0')}-${String(dataI.getDate()).padStart(2, '0')}`;
+    }
+
     const alreadyExists = novasMetas.some(m => m.descricao === metaAtual.descricao && m.vencimento === nextVencimento && !m.pago);
     
     if (!alreadyExists) {
@@ -139,6 +155,7 @@ export default function App() {
         descricao: metaAtual.descricao,
         valor: metaAtual.valor,
         vencimento: nextVencimento,
+        dataInicio: nextDataInicio,
         recorrente: true,
         progresso: 0,
         pago: false
@@ -247,10 +264,21 @@ export default function App() {
     const porcentagem = Math.min(100, Math.round((progressoAtual / meta.valor) * 100));
 
     const dataVencimento = new Date(meta.vencimento + 'T00:00:00');
-    const diferencaMilissegundos = dataVencimento.getTime() - dataAtual.getTime();
-    const diasParaVencer = Math.round(diferencaMilissegundos / (1000 * 60 * 60 * 24));
     
-    let diasCalculo = diasParaVencer + 1;
+    let dataReferencia = dataAtual;
+    if (meta.dataInicio) {
+      const dataI = new Date(meta.dataInicio + 'T00:00:00');
+      if (dataI > dataAtual) {
+        dataReferencia = dataI;
+      }
+    }
+
+    const diferencaMilissegundosReal = dataVencimento.getTime() - dataAtual.getTime();
+    const diasParaVencer = Math.round(diferencaMilissegundosReal / (1000 * 60 * 60 * 24));
+    
+    const diferencaMilissegundosCalc = dataVencimento.getTime() - dataReferencia.getTime();
+    let diasCalculo = Math.round(diferencaMilissegundosCalc / (1000 * 60 * 60 * 24));
+    
     if (diasCalculo <= 0) diasCalculo = 1;
     
     const metaDiaria = restante / diasCalculo;
@@ -425,19 +453,34 @@ export default function App() {
             />
           </div>
 
-          <div>
-            <label htmlFor="dateFinal" className="flex items-center space-x-2 text-sm font-medium text-zinc-300 mb-2">
-              <CalendarDays className="w-4 h-4 text-zinc-500" />
-              <span>Data de Vencimento</span>
-            </label>
-            <input
-              type="date"
-              id="dateFinal"
-              min={minDate}
-              value={dataFinal}
-              onChange={(e) => setDataFinal(e.target.value)}
-              className="w-full bg-black/50 border border-zinc-800 rounded-xl px-4 py-3.5 text-zinc-100 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all shadow-inner [&::-webkit-calendar-picker-indicator]:invert-[0.8] [&::-webkit-calendar-picker-indicator]:opacity-50 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="dateInicio" className="flex items-center space-x-2 text-sm font-medium text-zinc-300 mb-2">
+                <CalendarDays className="w-4 h-4 text-zinc-500" />
+                <span>Data de Início</span>
+              </label>
+              <input
+                type="date"
+                id="dateInicio"
+                value={dataInicio}
+                onChange={(e) => setDataInicio(e.target.value)}
+                className="w-full bg-black/50 border border-zinc-800 rounded-xl px-4 py-3.5 text-zinc-100 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all shadow-inner text-sm [&::-webkit-calendar-picker-indicator]:invert-[0.8] [&::-webkit-calendar-picker-indicator]:opacity-50 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
+              />
+            </div>
+            <div>
+              <label htmlFor="dateFinal" className="flex items-center space-x-2 text-sm font-medium text-zinc-300 mb-2">
+                <CalendarDays className="w-4 h-4 text-zinc-500" />
+                <span>Vencimento</span>
+              </label>
+              <input
+                type="date"
+                id="dateFinal"
+                min={minDate}
+                value={dataFinal}
+                onChange={(e) => setDataFinal(e.target.value)}
+                className="w-full bg-black/50 border border-zinc-800 rounded-xl px-4 py-3.5 text-zinc-100 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all shadow-inner text-sm [&::-webkit-calendar-picker-indicator]:invert-[0.8] [&::-webkit-calendar-picker-indicator]:opacity-50 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
+              />
+            </div>
           </div>
 
           <div className="flex items-center space-x-3 bg-zinc-900/40 border border-zinc-800 rounded-xl px-4 py-3 cursor-pointer select-none" onClick={() => setRecorrente(!recorrente)}>
