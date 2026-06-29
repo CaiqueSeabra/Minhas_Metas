@@ -27,7 +27,8 @@ import {
   Clock,
   PieChart as PieChartIcon,
   AlertTriangle,
-  BellRing
+  BellRing,
+  RefreshCw
 } from 'lucide-react';
 
 interface Meta {
@@ -37,6 +38,7 @@ interface Meta {
   vencimento: string;
   progresso?: number;
   pago?: boolean;
+  recorrente?: boolean;
 }
 
 export default function App() {
@@ -55,6 +57,7 @@ export default function App() {
   const [descricao, setDescricao] = useState('');
   const [valorInput, setValorInput] = useState('');
   const [dataFinal, setDataFinal] = useState('');
+  const [recorrente, setRecorrente] = useState(false);
   
   const [addProgressId, setAddProgressId] = useState<number | null>(null);
   const [progressInput, setProgressInput] = useState('');
@@ -102,12 +105,14 @@ export default function App() {
       id: Date.now(),
       descricao: descricao.trim(),
       valor: valor,
-      vencimento: dataFinal
+      vencimento: dataFinal,
+      recorrente: recorrente
     };
 
     setMetas([...metas, novaMeta]);
     setDescricao('');
     setValorInput('');
+    setRecorrente(false);
     setSelectedPeriod(dataFinal.substring(0, 7));
   };
 
@@ -115,13 +120,41 @@ export default function App() {
     setMetas(metas.filter(m => m.id !== id));
   };
 
+  const processarRecorrencia = (metaAtual: Meta, novasMetas: Meta[]) => {
+    if (!metaAtual.recorrente) return;
+    const [anoStr, mesStr, diaStr] = metaAtual.vencimento.split('-');
+    let data = new Date(parseInt(anoStr), parseInt(mesStr) - 1, parseInt(diaStr));
+    data.setMonth(data.getMonth() + 1);
+    
+    if (data.getMonth() !== (parseInt(mesStr) % 12)) {
+      data.setDate(0);
+    }
+
+    const nextVencimento = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+    const alreadyExists = novasMetas.some(m => m.descricao === metaAtual.descricao && m.vencimento === nextVencimento && !m.pago);
+    
+    if (!alreadyExists) {
+      novasMetas.push({
+        id: Date.now() + Math.random(),
+        descricao: metaAtual.descricao,
+        valor: metaAtual.valor,
+        vencimento: nextVencimento,
+        recorrente: true,
+        progresso: 0,
+        pago: false
+      });
+    }
+  };
+
   const marcarComoPago = (id: number) => {
-    setMetas(metas.map(m => {
-      if (m.id === id) {
-        return { ...m, pago: true, progresso: m.valor };
-      }
-      return m;
-    }));
+    setMetas(prevMetas => {
+      const meta = prevMetas.find(m => m.id === id);
+      if (!meta) return prevMetas;
+      
+      const newMetas = prevMetas.map(m => m.id === id ? { ...m, pago: true } : m);
+      processarRecorrencia(meta, newMetas);
+      return newMetas;
+    });
   };
 
   const reverterPagamento = (id: number) => {
@@ -151,12 +184,24 @@ export default function App() {
     const onlyDigits = progressInput.replace(/\D/g, '');
     const numericValue = onlyDigits === '' ? 0 : parseInt(onlyDigits, 10) / 100;
     
-    setMetas(metas.map(m => {
-      if (m.id === id) {
-        return { ...m, progresso: numericValue > m.valor ? m.valor : numericValue };
+    setMetas(prevMetas => {
+      const meta = prevMetas.find(m => m.id === id);
+      if (!meta) return prevMetas;
+
+      const isPago = numericValue >= meta.valor;
+      const newMetas = prevMetas.map(m => {
+        if (m.id === id) {
+          return { ...m, progresso: isPago ? m.valor : numericValue, pago: isPago ? true : m.pago };
+        }
+        return m;
+      });
+
+      if (isPago && !meta.pago) {
+        processarRecorrencia(meta, newMetas);
       }
-      return m;
-    }));
+
+      return newMetas;
+    });
     
     setAddProgressId(null);
     setProgressInput('');
@@ -188,6 +233,7 @@ export default function App() {
   let somaMetaGeral = 0;
   let somaTotalFaturas = 0;
   let somaTotalProgresso = 0;
+  let somaMetaGeralSemanal = 0;
   const dataAtual = new Date();
   dataAtual.setHours(0, 0, 0, 0);
 
@@ -202,22 +248,33 @@ export default function App() {
 
     const dataVencimento = new Date(meta.vencimento + 'T00:00:00');
     const diferencaMilissegundos = dataVencimento.getTime() - dataAtual.getTime();
-    let diferencaDias = Math.ceil(diferencaMilissegundos / (1000 * 60 * 60 * 24));
+    const diasParaVencer = Math.round(diferencaMilissegundos / (1000 * 60 * 60 * 24));
     
-    if (diferencaDias <= 0) diferencaDias = 1;
+    let diasCalculo = diasParaVencer + 1;
+    if (diasCalculo <= 0) diasCalculo = 1;
     
-    const metaDiaria = restante / diferencaDias;
+    const metaDiaria = restante / diasCalculo;
+    const metaSemanal = Math.min(metaDiaria * 7, restante);
+    
     somaMetaGeral += metaDiaria;
+    somaMetaGeralSemanal += metaSemanal;
     somaTotalFaturas += meta.valor;
     somaTotalProgresso += progressoAtual;
 
     const [ano, mes, dia] = meta.vencimento.split('-');
     const dataFormatadaBR = `${dia}/${mes}/${ano}`;
+    
+    const textoDias = diasParaVencer < 0 
+      ? `Atrasado há ${Math.abs(diasParaVencer)} ${Math.abs(diasParaVencer) === 1 ? 'dia' : 'dias'}`
+      : diasParaVencer === 0 
+        ? 'Vence hoje' 
+        : `Vence em ${diasParaVencer} ${diasParaVencer === 1 ? 'dia' : 'dias'}`;
 
     return {
       ...meta,
-      diferencaDias,
+      textoDias,
       metaDiaria,
+      metaSemanal,
       dataFormatadaBR,
       progressoAtual,
       restante,
@@ -291,15 +348,26 @@ export default function App() {
               className="relative overflow-hidden bg-zinc-900/50 backdrop-blur-xl border border-emerald-500/20 rounded-3xl p-6 shadow-2xl"
             >
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-cyan-500"></div>
-              <div className="flex flex-col items-center text-center space-y-3 relative z-10">
+              <div className="flex flex-col items-center text-center space-y-3 relative z-10 mb-6">
                 <div className="flex items-center space-x-2 text-zinc-400">
                   <Target className="w-4 h-4" />
                   <span className="text-sm font-medium uppercase tracking-widest">Meta Diária ({formatPeriodShort(selectedPeriod)})</span>
                 </div>
-                <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-400 to-cyan-400 tracking-tight">
+                <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-400 to-emerald-600 tracking-tight">
                   {somaMetaGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </div>
               </div>
+              
+              <div className="flex flex-col items-center text-center space-y-2 relative z-10">
+                <div className="flex items-center space-x-2 text-zinc-400">
+                  <Target className="w-3.5 h-3.5" />
+                  <span className="text-xs font-medium uppercase tracking-widest">Meta Semanal</span>
+                </div>
+                <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-br from-cyan-400 to-cyan-600 tracking-tight">
+                  {somaMetaGeralSemanal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+              </div>
+
               <div className="flex justify-between items-center border-t border-zinc-800/50 pt-5 mt-5">
                 <div className="flex items-center space-x-2 text-zinc-400">
                   <TrendingUp className="w-4 h-4" />
@@ -370,6 +438,13 @@ export default function App() {
               onChange={(e) => setDataFinal(e.target.value)}
               className="w-full bg-black/50 border border-zinc-800 rounded-xl px-4 py-3.5 text-zinc-100 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all shadow-inner [&::-webkit-calendar-picker-indicator]:invert-[0.8] [&::-webkit-calendar-picker-indicator]:opacity-50 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
             />
+          </div>
+
+          <div className="flex items-center space-x-3 bg-zinc-900/40 border border-zinc-800 rounded-xl px-4 py-3 cursor-pointer select-none" onClick={() => setRecorrente(!recorrente)}>
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${recorrente ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600 bg-black/50'}`}>
+              {recorrente && <CheckCircle className="w-3.5 h-3.5 text-black" />}
+            </div>
+            <span className="text-sm font-medium text-zinc-300">Conta recorrente (mensal)</span>
           </div>
 
           <button
@@ -458,10 +533,13 @@ export default function App() {
               >
                 <div className="flex justify-between items-start mb-5">
                   <div>
-                    <h3 className="text-lg font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{meta.descricao}</h3>
+                    <h3 className="text-lg font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors flex items-center space-x-2">
+                      <span>{meta.descricao}</span>
+                      {meta.recorrente && <RefreshCw className="w-4 h-4 text-emerald-500/70" title="Conta Recorrente" />}
+                    </h3>
                     <div className="flex items-center space-x-1.5 text-sm text-zinc-400 mt-1">
                       <CalendarDays className="w-3.5 h-3.5" />
-                      <span>Vence em {meta.dataFormatadaBR} <span className="text-zinc-500">({meta.diferencaDias} {meta.diferencaDias === 1 ? 'dia' : 'dias'})</span></span>
+                      <span>{meta.dataFormatadaBR} <span className="text-zinc-500">({meta.textoDias})</span></span>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -511,6 +589,12 @@ export default function App() {
                         {meta.restante < meta.valor && (
                           <span className="text-zinc-500 text-xs ml-1">({meta.restante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})</span>
                         )}
+                      </span>
+                   </div>
+                   <div className="flex flex-col items-end sm:items-center">
+                      <span className="text-[11px] font-bold text-cyan-500/70 uppercase tracking-widest mb-1.5">Fazer por Semana</span>
+                      <span className="text-xl font-black text-cyan-400 tracking-tight">
+                        {meta.metaSemanal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </span>
                    </div>
                    <div className="flex flex-col items-end">
@@ -592,7 +676,10 @@ export default function App() {
               >
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="text-lg font-bold text-zinc-300 line-through decoration-zinc-600 decoration-2">{meta.descricao}</h3>
+                    <h3 className="text-lg font-bold text-zinc-300 line-through decoration-zinc-600 decoration-2 flex items-center space-x-2">
+                      <span>{meta.descricao}</span>
+                      {meta.recorrente && <RefreshCw className="w-4 h-4 text-emerald-500/50" title="Conta Recorrente" />}
+                    </h3>
                     <div className="flex items-center space-x-1.5 text-sm text-zinc-500 mt-1">
                       <Clock className="w-3.5 h-3.5" />
                       <span>Pago. Venceria em {meta.dataFormatadaBR}</span>
@@ -688,6 +775,7 @@ export default function App() {
                       <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
                       <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `R$${val}`} />
                       <Tooltip 
+                        formatter={(value: number, name: string) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, name]}
                         contentStyle={{ backgroundColor: '#18181b', borderColor: '#27272a', borderRadius: '12px', color: '#f4f4f5' }}
                         itemStyle={{ color: '#f4f4f5' }}
                         cursor={{ fill: '#27272a', opacity: 0.4 }}
