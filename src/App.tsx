@@ -67,6 +67,16 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'ativas' | 'historico' | 'grafico'>('ativas');
 
+  const [diasTrabalho, setDiasTrabalho] = useState<number[]>(() => {
+    const saved = localStorage.getItem('dias_trabalho_carlos');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [0, 1, 2, 3, 4, 5, 6]; // Default: todos os dias
+  });
+
   const today = new Date();
   const currentPeriodDefaultStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const [selectedPeriod, setSelectedPeriod] = useState(currentPeriodDefaultStr);
@@ -74,6 +84,48 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('metas_carlos', JSON.stringify(metas));
   }, [metas]);
+
+  useEffect(() => {
+    localStorage.setItem('dias_trabalho_carlos', JSON.stringify(diasTrabalho));
+  }, [diasTrabalho]);
+
+
+  const calcularDiasUteis = (startDate: Date, endDate: Date, diasSelecionados: number[]) => {
+    let count = 0;
+    
+    // Zera as horas para comparar apenas as datas
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    
+    const end = new Date(endDate);
+    end.setHours(0, 0, 0, 0);
+
+    const diffTime = end.getTime() - start.getTime();
+    const diffDays = Math.max(0, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+
+    if (diffDays === 0) {
+      if (diasSelecionados.includes(start.getDay())) {
+        count = 1;
+      }
+    } else {
+      for (let i = 0; i < diffDays; i++) {
+        const currentDate = new Date(start.getTime() + i * (1000 * 60 * 60 * 24));
+        if (diasSelecionados.includes(currentDate.getDay())) {
+          count++;
+        }
+      }
+    }
+    
+    return count > 0 ? count : 1;
+  };
+
+  const toggleDiaTrabalho = (diaIndex: number) => {
+    setDiasTrabalho(prev => 
+      prev.includes(diaIndex) 
+        ? prev.filter(d => d !== diaIndex)
+        : [...prev, diaIndex].sort((a, b) => a - b)
+    );
+  };
 
   const handleValorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -276,13 +328,10 @@ export default function App() {
     const diferencaMilissegundosReal = dataVencimento.getTime() - dataAtual.getTime();
     const diasParaVencer = Math.round(diferencaMilissegundosReal / (1000 * 60 * 60 * 24));
     
-    const diferencaMilissegundosCalc = dataVencimento.getTime() - dataReferencia.getTime();
-    let diasCalculo = Math.round(diferencaMilissegundosCalc / (1000 * 60 * 60 * 24));
-    
-    if (diasCalculo <= 0) diasCalculo = 1;
+    let diasCalculo = calcularDiasUteis(dataReferencia, dataVencimento, diasTrabalho);
     
     const metaDiaria = Math.ceil(restante / diasCalculo);
-    const metaSemanal = metaDiaria * 7;
+    const metaSemanal = metaDiaria * diasTrabalho.length;
     
     somaMetaGeral += metaDiaria;
     somaMetaGeralSemanal += metaSemanal;
@@ -420,6 +469,45 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <div className="bg-zinc-900/40 backdrop-blur-md border border-zinc-800/80 rounded-3xl p-6 shadow-xl mb-6">
+          <div className="flex flex-col space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-zinc-300">
+                <CalendarDays className="w-5 h-5 text-emerald-500" />
+                <span className="font-semibold tracking-wide">Dias de Trabalho</span>
+              </div>
+              <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Folgas Editáveis</span>
+            </div>
+            
+            <div className="flex justify-between items-center w-full gap-2">
+              {[
+                { id: 0, label: 'D' },
+                { id: 1, label: 'S' },
+                { id: 2, label: 'T' },
+                { id: 3, label: 'Q' },
+                { id: 4, label: 'Q' },
+                { id: 5, label: 'S' },
+                { id: 6, label: 'S' },
+              ].map((dia) => {
+                const isSelected = diasTrabalho.includes(dia.id);
+                return (
+                  <button
+                    key={dia.id}
+                    onClick={() => toggleDiaTrabalho(dia.id)}
+                    className={`flex-1 aspect-square flex items-center justify-center rounded-xl text-sm font-bold transition-all duration-300 ${
+                      isSelected
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)] scale-105'
+                        : 'bg-zinc-950/50 text-zinc-600 border border-zinc-800/80 hover:bg-zinc-900 hover:text-zinc-400'
+                    }`}
+                  >
+                    {dia.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
 
         <div className="bg-zinc-900/40 backdrop-blur-md border border-zinc-800/80 rounded-3xl p-6 shadow-xl space-y-5">
           <div>
